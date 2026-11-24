@@ -23,4 +23,6 @@ pytest
 ## Layout
 `src/casestudy/` code · `scripts/` pipeline · `results/` tables and figures · `docs/` brief, plan, data notes, strategy spec · `tests/`.
 
+*Built with AI-assisted development; research design, review and decisions by me.*
+
 *Hypothetical backtested results; not investment advice.*
