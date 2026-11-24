@@ -1,6 +1,6 @@
-# Case study: <title>
+# Do 12-period EMA strategies work on futures?
 
-> One-line question this study answers.
+> A reproducible test of 12 EMA-based strategies on 13 liquid futures (2001–2026), with pre-registered pass criteria, walk-forward validation and cost stress tests. Brief: `docs/BRIEF.md` · plan and criteria: `docs/PLAN.md`.
 
 ## Question
 What exactly is being tested, and what result would count as "yes" or "no" (decided before looking at the data).

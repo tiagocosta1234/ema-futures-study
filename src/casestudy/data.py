@@ -69,3 +69,24 @@ def load(path, scale=1000.0, tz="America/New_York"):
 if __name__ == "__main__":
     ins, a, b, out = sys.argv[1], dt.date.fromisoformat(sys.argv[2]), dt.date.fromisoformat(sys.argv[3]), sys.argv[4]
     download(ins, a, b, out)
+
+
+# ---- Daily continuous futures (Yahoo Finance front-month "=F" series) --------------------------------------------
+# NOTE: these are front-month continuous series, NOT back-adjusted. Roll days create artificial gaps;
+# see docs/DATA.md for how they are detected and neutralised.
+import json
+
+YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?period1={p1}&period2={p2}&interval=1d"
+UNIVERSE = {"ES": "ES=F", "NQ": "NQ=F", "YM": "YM=F", "CL": "CL=F", "NG": "NG=F", "GC": "GC=F", "SI": "SI=F",
+            "HG": "HG=F", "6E": "6E=F", "6J": "6J=F", "6B": "6B=F", "ZB": "ZB=F", "ZN": "ZN=F"}
+
+
+def yahoo_daily(sym, start="2000-01-01", end=None):
+    p1 = int(pd.Timestamp(start, tz="UTC").timestamp())
+    p2 = int(pd.Timestamp(end or pd.Timestamp.utcnow(), tz="UTC").timestamp()) if end else int(time.time())
+    req = urllib.request.Request(YAHOO.format(sym=sym, p1=p1, p2=p2), headers={"User-Agent": "Mozilla/5.0"})
+    r = json.load(urllib.request.urlopen(req, timeout=30))["chart"]["result"][0]
+    q = r["indicators"]["quote"][0]
+    df = pd.DataFrame({"open": q["open"], "high": q["high"], "low": q["low"], "close": q["close"], "volume": q["volume"]},
+                      index=pd.to_datetime(r["timestamp"], unit="s", utc=True).tz_convert(r["meta"]["exchangeTimezoneName"]).normalize().tz_localize(None))
+    return df.dropna(subset=["open", "high", "low", "close"])
