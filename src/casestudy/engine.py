@@ -28,6 +28,7 @@ class Config:
     daily_loss_limit: float = 0.02     # stop new entries next day
     cost_mult: float = 1.0             # 1 base, 2 moderate, 3 severe
     allow_short: bool = True
+    fractional: bool = False         # True = fractional contracts (measures the signal, not account granularity)
 
 
 def run(data, signals, cfg=Config(), start=None, end=None):
@@ -54,6 +55,7 @@ def run(data, signals, cfg=Config(), start=None, end=None):
     pos = {s: None for s in syms}          # dict(side, qty, entry, stop, risk, i0)
     pending = {s: None for s in syms}      # ('enter', side, stop_level) / ('exit',) / ('reverse', side, stop_level)
     trades, curve = [], np.empty(len(idx))
+    skipped = []                          # entries the 0.5% risk rule could not size (qty rounded to 0)
     last_close = {s: np.nan for s in syms}
     block_entries = False
     for i in range(len(idx)):
@@ -89,6 +91,8 @@ def run(data, signals, cfg=Config(), start=None, end=None):
                     dist = max(dist, 0.5 * prev_atr)   # minimum stop = 0.5 ATR (a gap next to the stop must not inflate size)
                 if np.isfinite(dist) and dist > 0:
                     qty = _size(s, dist, eq, a, pos, A, cfg)
+                    if qty <= 0 and not cfg.fractional and cfg.risk_per_trade * eq < dist * a["point_value"]:
+                        skipped.append((s, idx[i]))
                     if qty > 0:
                         eq -= a["side_cost"] * qty
                         pos[s] = p = dict(side=side, qty=qty, entry=o, stop=o - side * dist, risk=dist * qty * a["point_value"],
@@ -123,20 +127,23 @@ def run(data, signals, cfg=Config(), start=None, end=None):
         if pos[s] is not None:
             trades.append(_close(s, pos[s], idx, len(idx) - 1, last_close[s], A[s], final=True))
     T = pd.DataFrame(trades)
+    T.attrs["skipped"] = skipped
     return pd.Series(curve, index=idx, name="equity"), T
 
 
 def _size(s, dist, eq, a, pos, A, cfg):
     risk_cash = cfg.risk_per_trade * eq
-    qty = int(risk_cash // (dist * a["point_value"]))
+    unit = dist * a["point_value"]
+    rnd = (lambda x: x) if cfg.fractional else (lambda x: float(int(x)))
+    qty = rnd(risk_cash / unit)
     if qty <= 0:
         return 0
     open_risk = sum(p["risk"] for p in pos.values() if p)
     cls_risk = sum(p["risk"] for p in pos.values() if p and p["cls"] == a["asset_class"])
     margin = sum(A[k]["margin"] * p["qty"] for k, p in pos.items() if p)
     room = min(cfg.max_open_risk * eq - open_risk, cfg.max_class_risk * eq - cls_risk)
-    qty = min(qty, int(max(room, 0) // (dist * a["point_value"])))
-    qty = min(qty, int(max(cfg.max_margin * eq - margin, 0) // a["margin"]))
+    qty = min(qty, rnd(max(room, 0) / unit))
+    qty = min(qty, rnd(max(cfg.max_margin * eq - margin, 0) / a["margin"]))
     return max(qty, 0)
 
 

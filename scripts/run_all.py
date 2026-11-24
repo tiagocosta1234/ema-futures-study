@@ -43,7 +43,7 @@ def main():
             sig = {s: f(d, n) for s, d in data.items()}
             costs = COSTS if n == 12 else {MAIN_COST: COSTS[MAIN_COST]}
             for cname, cm in costs.items():
-                eq, T = run(data, sig, Config(cost_mult=cm))
+                eq, T = run(data, sig, Config(cost_mult=cm, fractional=True))
                 if cname == MAIN_COST:
                     daily_rets[(name, n)] = eq.pct_change().fillna(0.0)
                     p = perf(eq, T)
@@ -57,6 +57,14 @@ def main():
                         for sp, (a, b) in SPLITS.items():
                             rows.append(dict(strategy=name, split=sp, **slice_perf(eq, T, a, b)))
             print(name, n, flush=True)
+    # appendix: whole contracts on a $1M account (implementation view) + how many entries round to 0 contracts
+    integ = []
+    for name, f in STRATEGIES.items():
+        sig = {s: f(d, 12) for s, d in data.items()}
+        eq_i, T_i = run(data, sig, Config(cost_mult=COSTS[MAIN_COST], fractional=False))
+        sk = len(T_i.attrs.get("skipped", []))
+        integ.append(dict(strategy=name, **perf(eq_i, T_i), skipped_zero_contracts=sk, skipped_share=sk / max(sk + len(T_i), 1)))
+    pd.DataFrame(integ).to_csv(f"{RES}/integer_contracts_appendix.csv", index=False)
     pd.DataFrame(rows).to_csv(f"{RES}/splits_moderate.csv", index=False)
     pd.DataFrame(sens).to_csv(f"{RES}/ema_sensitivity.csv", index=False)
     pd.DataFrame(cost_rows).to_csv(f"{RES}/cost_stress.csv", index=False)

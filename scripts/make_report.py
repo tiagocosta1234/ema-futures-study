@@ -96,7 +96,7 @@ def main():
     fig.suptitle("Drawdowns (%), moderate costs, EMA 12", x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout(rect=(0, 0, 1, 0.96)); fig.savefig(f"{FIG}/drawdowns.png", dpi=110); plt.close(fig)
 
-    H = sens.pivot(index="strategy", columns="ema", values="sharpe").loc[names]
+    H = sens.pivot(index="strategy", columns="ema", values="sharpe_in_sample").loc[names]
     fig, ax = plt.subplots(figsize=(8.5, 6.2))
     lim = max(0.6, np.nanmax(np.abs(H.values)))
     im = ax.imshow(H.values, cmap=DIV, vmin=-lim, vmax=lim, aspect="auto")
@@ -105,7 +105,7 @@ def main():
             ax.text(j, i, f"{H.values[i, j]:.2f}", ha="center", va="center", fontsize=8.5, color=INK)
     ax.set_xticks(range(H.shape[1])); ax.set_xticklabels([f"EMA {c}" for c in H.columns])
     ax.set_yticks(range(H.shape[0])); ax.set_yticklabels(H.index)
-    ax.set_title("Parameter sensitivity: full-sample Sharpe by fast-EMA period (moderate costs)", loc="left", fontsize=10.5, color=INK)
+    ax.set_title("Parameter sensitivity: IN-SAMPLE (2001–15) Sharpe by fast-EMA period (moderate costs)", loc="left", fontsize=10.5, color=INK)
     fig.colorbar(im, ax=ax, shrink=0.8, label="Sharpe"); fig.tight_layout(); fig.savefig(f"{FIG}/ema_heatmap.png", dpi=120); plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(12, 4.8))
@@ -162,6 +162,24 @@ def main():
     ax.grid(color=GRID, lw=0.6); ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout(); fig.savefig(f"{FIG}/s11_intraday.png", dpi=120); plt.close(fig)
 
+    # ---------- turnover and margin usage (from the trade list; back-adjusted prices -> |entry| approximates notional)
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+    from casestudy.specs import SPECS
+    tm = []
+    for s_ in names:
+        t = T[T.strategy == s_].copy()
+        e = eq[s_]
+        pv = t.sym.map(lambda k: SPECS[k][1]); mg = t.sym.map(lambda k: SPECS[k][3])
+        years = (e.index[-1] - e.index[0]).days / 365.25
+        turnover = (2 * t.qty * t.entry.abs() * pv).sum() / e.mean() / years
+        m = pd.Series(0.0, index=e.index)
+        for a, b, q in zip(pd.to_datetime(t.entry_date), pd.to_datetime(t.exit_date), t.qty * mg):
+            m.loc[a:b] += q
+        tm.append(dict(strategy=s_, turnover_x_per_year=turnover, avg_margin_pct=(m / e).mean(), max_margin_pct=(m / e).max()))
+    TM = pd.DataFrame(tm).set_index("strategy"); TM.to_csv(f"{RES}/turnover_margin.csv")
+    IA = pd.read_csv(f"{RES}/integer_contracts_appendix.csv").set_index("strategy")
+
     # ---------- markdown tables for the report
     md = ["| Strategy | Verdict | Criteria met | Full Sharpe | Full CAGR | Max DD | Test Sharpe | Test CAGR | Test trades | Walk-fwd Sharpe | Severe-cost Sharpe | Markets + | Classes + | Net P&L $k | Without top 1% trades $k |",
           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -184,6 +202,13 @@ def main():
     md += [f"| {r.cost} | {r.split} | {r.trades} | {fmt(r.win_rate, True)} | {fmt(r.avg_R, d=3)} | {fmt(r.t)} | {r.pnl:,.0f} | {fmt(r.profit_factor)} |" for _, r in s.iterrows()]
     s = s11[(s11.cost == "moderate") & (s11.split == "all")]
     md += ["", "| S11 EMA period | Trades | Avg R | t |", "|---|---|---|---|"] + [f"| {int(r.ema)} | {r.trades} | {fmt(r.avg_R, d=3)} | {fmt(r.t)} |" for _, r in s.iterrows()]
+    md += ["", "| Strategy | Turnover (x equity / yr) | Avg margin / equity | Max margin / equity |", "|---|---|---|---|"]
+    md += [f"| {k} | {r.turnover_x_per_year:.1f} | {fmt(r.avg_margin_pct, True)} | {fmt(r.max_margin_pct, True)} |" for k, r in TM.loc[names].iterrows()]
+    md += ["", "| Strategy (whole contracts, $1M) | Sharpe | CAGR | Trades | Entries skipped (0 contracts) |", "|---|---|---|---|---|"]
+    md += [f"| {k} | {fmt(r.sharpe)} | {fmt(r.cagr, True)} | {int(r.trades)} | {int(r.skipped_zero_contracts)} ({fmt(r.skipped_share, True)}) |" for k, r in IA.loc[names].iterrows()]
+    Hf = sens.pivot(index="strategy", columns="ema", values="sharpe").loc[names]
+    md += ["", "| Full-sample Sharpe (includes the test period) | " + " | ".join(f"EMA {c}" for c in Hf.columns) + " |", "|---" * (len(Hf.columns) + 1) + "|"]
+    md += [f"| {k} | " + " | ".join(fmt(v) for v in r.values) + " |" for k, r in Hf.iterrows()]
     open(f"{RES}/report_tables.md", "w", encoding="utf-8").write("\n".join(md))
     print(V[["strategy", "verdict", "passed", "full_sharpe", "test_sharpe", "wf_sharpe", "severe_sharpe", "failed"]].to_string(index=False))
 

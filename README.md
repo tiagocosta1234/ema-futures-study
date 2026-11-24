@@ -3,7 +3,7 @@
 > A reproducible test of 12 EMA-based strategies on 13 liquid futures (2001–2026), with pre-registered pass criteria, walk-forward validation and cost stress tests. Brief: `docs/BRIEF.md` · plan and criteria: `docs/PLAN.md`.
 
 ## Result in one paragraph
-**No strategy passed the six criteria fixed before the test.** The 12-period EMA is too fast for daily futures: as a stand-alone signal it loses after realistic costs (Sharpe −0.4 to −0.9), and every strategy improves with slower EMAs (50–100). The best candidates, S06 Triple EMA and S05 EMA12/50 cross, are positive across most markets and survive severe costs, but miss the out-of-sample bar. S04's strong 2021–26 result comes from two metal trades. Full report: **[REPORT.md](REPORT.md)**.
+**One of 12 strategies passed all six criteria fixed before the test, and only narrowly: S06 Triple EMA (12/26/50)**, with test-period Sharpe 0.35 vs a 0.30 bar, positive in 12/13 markets and 5/5 asset classes, and surviving 3× costs. Data and engine fixes were made after the test was seen (disclosed), so it is a candidate to confirm on new data, not a proven edge. The 12-period EMA on its own is too fast for daily futures: price/EMA crosses lose after realistic costs (Sharpe −0.45 to −0.69), and almost every strategy improves with slower EMAs (50–100). Full report: **[REPORT.md](REPORT.md)**.
 
 ![equity](results/figures/equity_curves.png)
 
